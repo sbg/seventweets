@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest==3.0.5
+pytest-cov==2.4.0
+pytest-flask==0.10.0
+testing.postgresql==1.2.0

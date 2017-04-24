@@ -1,0 +1,10 @@
+=========================================================================
+    ==   NOTICE file for use with the Apache License, Version 2.0,==
+           ==   in this case for the Seven Tweets project. ==
+=========================================================================
+
+Seven Tweets project
+Copyright 2017 Seven Bridges Genomics Inc.
+
+This product includes software developed at
+Seven Bridges Genomics Inc. (https://www.sevenbridges.com/)

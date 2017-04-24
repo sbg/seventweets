@@ -1,0 +1,6 @@
+server:
+  server_name: drugi
+  database: drugiserver
+  serving_at_port: '8001'
+  my_address: '127.0.0.1'
+  connect_to: '127.0.0.1:8000'
