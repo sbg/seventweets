@@ -1,5 +1,6 @@
 -r requirements.txt
 pytest==3.0.5
-pytest-cov==2.4.0
 pytest-flask==0.10.0
 testing.postgresql==1.2.0
+Fabric3==1.13.1.post1
+flask-shell-ipython==0.2.2

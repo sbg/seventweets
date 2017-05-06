@@ -1,94 +1,147 @@
+"""
+SevenTweets HTTP client implementation.
+"""
+
+import copy
 import requests
+from datetime import datetime
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+from requests.exceptions import RetryError, ConnectionError, ConnectTimeout
+from seventweets import exceptions
 
 
 class Client:
     """
-    Class for handling communication with other servers.
-    One instance of the Client is responsible for one other server.
+    Client for seventweets. Since all seventweets servers share same API,
+    this client is used to communicate with other nodes in the mash.
     """
+    _exceptions = {
+        400: exceptions.BadRequest,
+        401: exceptions.Unauthorized,
+        403: exceptions.Forbidden,
+        404: exceptions.NotFound,
+        409: exceptions.Conflict,
+        500: exceptions.ServerError,
+        502: exceptions.BadGateway,
+        503: exceptions.ServiceUnavailable,
+    }
 
-    def __init__(self, address):
-        """
-        Initialize Client with server address
-        :param address: Server with whom Client instance communicates
-        """
+    def __init__(self, address, default_headers=None, cleanup_callback=None):
         self.address = address
+        self._session = None
+        self.default_headers = default_headers or {
+            'Content-Type': 'application/json'
+        }
+        self.cleanup_callback = cleanup_callback
 
-    def _create_url(self, path):
+    @property
+    def session(self):
         """
-        Creates url string
-        :param path: endpoint
-        :return:  string url
+        Returns session for maintaining open connections to servers.
         """
-        return 'http://{}{}'.format(self.address, path)
+        if not hasattr(self, '_session') or not self._session:
+            self._session = requests.session()
+            # sane defaults for retry policy
+            retries = Retry(total=3, backoff_factor=1,
+                            status_forcelist=[502, 503, 504])
+            self._session.mount('http://', HTTPAdapter(max_retries=retries))
+            self._session.mount('https://', HTTPAdapter(max_retries=retries))
+        return self._session
 
-    @staticmethod
-    def _request(method, url, params=None, data=None,
-                 headers={'content-type': 'application/json'}):
+    def _request(self, method, path, params=None, data=None, headers=None):
         """
-        Method for handling all types of requests
-        :param method: request method type
-        :param url: sending request to this url
-        :param params: params of the request that goes to query string
-        :param data: data that goes to the body of the request
-        :param headers: header fields of the request
-        :return: Response of the request
+        Sends requests, checks response for errors and returns
+        :param method: HTTP verb to use for request.
+        :type method: str
+        :param path: Path on remote server to send request to.
+        :type path: str
+        :param params: Query parameters to include in request.
+        :type params: dict
+        :param data: Body data to send with request.
+        :type data: object
+        :param headers: Additional headers to include in request.
+        :type headers: dict
+        :return: Response body returned from server.
+        :raises: HttpException subclass, if response status code is not valid.
         """
+        all_headers = copy.copy(self.default_headers)
+        all_headers.update(headers or {})
+        url = '{}{}'.format(self.address, path)
+        try:
+            resp = self.session.request(
+                method, url, params=params, json=data, headers=all_headers
+            )
 
-        if method == 'GET':
-            return requests.get(url, params=params, headers=headers)
-        elif method == 'DELETE':
-            return requests.delete(url, headers=headers)
-        elif method == 'POST':
-            return requests.post(url, json=data, headers=headers)
-        elif method == 'PUT':
-            return requests.put(url, json=data, headers=headers)
+            self._raise(resp)
+            # check if there's a body
+            if resp.status_code != 204:
+                return resp.json()
 
-    def register(self, data):
+        except (RetryError, ConnectionError, ConnectTimeout):
+            self.cleanup_callback()
+            raise exceptions.BadGateway(
+                'The node you provided is unreachable.'
+            )
+
+    def _raise(self, response):
         """
-        Sends register request to another server
-        :param data: body of the request
-        :return: Response of the request
+        Based on provided response, raises appropriate HttpException.
+
+        This method does not return meaningful result, it is useful only
+        for its side effect.
+
+        :param response: Response received from server.
         """
-        return self._request(method='POST', url=self._create_url('/register'),
-                             data=data)
+        exc = self._exceptions.get(response.status_code, None)
+        if exc is not None:
+            raise exc(response)
+
+    def register(self, data, force_update=False):
+        return self._request('POST', '/registry/', data=data,
+                             params={'force': force_update})
 
     def unregister(self, name):
-        """
-        Sends unregister request to another server
-        :param name: Name of server that sends request
-        :return:
-        """
-        return self._request(method='DELETE',
-                             url=self._create_url('/unregister/' + name))
+        self._request('DELETE', '/registry/{}'.format(name))
 
-    def update_tweet(self, tweet, id):
-        return self._request(method='PUT', url=self._create_url(
-            '/tweets/' + str(id)), data={'tweet': tweet})
+    def update_tweet(self, tweet, tweet_id):
+        return self._request(
+            'PUT', '/tweets/{}'.format(id), data={'tweet': tweet}
+        )
 
-    def delete_tweet(self, id):
-        return self._request(method='DELETE',
-                             url=self._create_url('/tweets/' + str(id)))
+    def delete_tweet(self, tweet_id):
+        return self._request('DELETE', '/tweets/{}'.format(tweet_id))
 
     def create_tweet(self, tweet):
-        return self._request(method='POST', url=self._create_url('/tweets'),
-                             data={'tweet': tweet})
+        self._request('POST', '/tweets', data={'tweet': tweet})
 
-    def create_re_tweet(self, name, id):
-        return self._request(method='POST', url=self._create_url('/retweet'),
-                             data={'name': name, 'id': id})
+    def create_retweet(self, name, tweet_id):
+        self._request('POST', '/retweet',
+                      data={'name': name, 'id': tweet_id})
 
-    def get_tweet(self, id):
-        return self._request(method='GET',
-                             url=self._create_url('/tweets/' + str(id)))
+    def get_tweet(self, tweet_id):
+        return self._request('GET', '/tweets/{}'.format(tweet_id))
 
     def get_tweets(self):
-        return self._request(method='GET', url=self._create_url('/tweets'))
+        return self._request('GET', '/tweets')
 
-    def search(self, params):
-        return self._request(method='GET', url=self._create_url('/search'),
-                             params=params)
+    def search(self, content: str=None,
+               from_created: datetime=None,
+               to_created: datetime=None,
+               from_modified: datetime=None,
+               to_modified: datetime=None,
+               retweet: bool=None,
+               all: bool=False):
+        return self._request('GET', '/tweets/search', params={
+            'content': content if content else '',
+            'created_from': from_created.timestamp() if from_created else '',
+            'created_to': to_created.timestamp() if to_created else '',
+            'modified_from': (from_modified.timestamp()
+                              if from_modified else ''),
+            'modified_to': to_modified.time() if to_modified else '',
+            'retweet': 'true' if retweet else 'false',
+            'all': 'true' if all else 'false',
+        })
 
     def search_me(self, params):
-        return self._request(method='GET', url=self._create_url('/search_me'),
-                             params=params)
+        return self._request('GET', '/search_me', params=params)

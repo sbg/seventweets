@@ -21,3 +21,4 @@ project.rst~
 .idea/vcs.xml
 .idea/workspace.xml
 .htmlcov/c
+.mypy_cache/

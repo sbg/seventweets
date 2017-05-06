@@ -1,6 +1,0 @@
-server:
-  server_name: prvi
-  database: prviserver
-  serving_at_port: '8000'
-  my_address: '127.0.0.1'
-  connect_to:

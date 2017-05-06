@@ -1,33 +1,19 @@
-from seventweets.client import Client
+import os
+
+ST_DB_HOST = 'localhost'
+ST_DB_PORT = 5432
+ST_DB_USER = 'workshop'
+ST_DB_PASS = None
+ST_DB_NAME = 'seventweets'
+ST_OWN_NAME = None
+ST_OWN_ADDRESS = None
+ST_API_TOKEN = None
 
 
-# class Singleton(type):
-#     _instances = {}
-#
-#     def __call__(cls, *args, **kwargs):
-#         if cls not in cls._instances:
-#             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-#         return cls._instances[cls]
-
-
-class Global:
-    """
-    Class for simulating global object g
-    """
-
-    def get_client(self, server_name=None, server_address=None):
-        """
-        Get instance of class Client
-        :param server_name: Server with whom Client instance communicates
-        :param server_address: Server with whom Client instance communicates
-        :return: Client instance
-        """
-        if server_name:
-            for name, address in self.registry.servers.items():
-                if name == server_name:
-                    return Client(address)
-            return None
-        elif server_address:
-            return Client(server_address)
-
-g = Global()
+# Set module level config variables by loading them from environment.
+for name in list(globals().keys()):
+    try:
+        if name.startswith('ST_'):
+            globals()[name] = os.environ[name]
+    except KeyError:
+        pass

@@ -1,11 +1,15 @@
+import abc
+import logging
 from flask import jsonify
 from functools import wraps
-import logging
 
 logger = logging.getLogger(__name__)
 
 
-class HttpException(Exception):
+class HttpException(Exception, metaclass=abc.ABCMeta):
+    """
+    Base exception for all HTTP related errors.
+    """
     CODE = 0
 
 
@@ -13,15 +17,35 @@ class BadRequest(HttpException):
     CODE = 400
 
 
-class NotFound(HttpException):
-    CODE = 404
+class Unauthorized(HttpException):
+    CODE = 401
 
 
 class Forbidden(HttpException):
     CODE = 403
 
 
-def except_handler(f):
+class NotFound(HttpException):
+    CODE = 404
+
+
+class Conflict(HttpException):
+    CODE = 409
+
+
+class ServerError(HttpException):
+    CODE = 500
+
+
+class BadGateway(HttpException):
+    CODE = 502
+
+
+class ServiceUnavailable(HttpException):
+    CODE = 503
+
+
+def error_handler(f):
     """
     Handles exceptions caught in http layer (server.py)
     :param f: wrapped function
@@ -38,20 +62,6 @@ def except_handler(f):
             }
             logger.warning(body['message'])
             return jsonify(body), e.CODE
-        except TypeError:
-            body = {
-                'message': 'bad request',
-                'code': 400,
-            }
-            logger.exception(body['message'])
-            return jsonify(body), 400
-        except KeyError:
-            body = {
-                'message': 'bad request json does not have required fields',
-                'code': 400,
-            }
-            logger.exception(body['message'])
-            return jsonify(body), 400
         except Exception as e:
             body = {
                 'message': str(e),
